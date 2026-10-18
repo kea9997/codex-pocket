@@ -1,0 +1,14 @@
+{
+  "name": "codex-pocket",
+  "version": "0.3.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs tools/public-preview/demo.test.mjs",
+    "start": "node server/main.mjs",
+    "preview": "node tools/ui-preview.mjs",
+    "check:source": "node tools/source-package.mjs"
+  }
+}

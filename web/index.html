@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ko" data-web-revision="__WEB_REVISION__">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Codex 원격</title>
+  <script src="/convenience.js"></script>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/device-state.js" defer></script>
+  <script src="/uploads.js" defer></script>
+  <script src="/markdown-blocks.js" defer></script>
+  <script src="/accounts.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <section id="pairView" class="pair-view">
+    <div class="pair-content">
+      <span class="wordmark">Codex <span>원격</span></span>
+      <h1>PC의 대화를<br>이어서 보세요.</h1>
+      <p>같은 Tailscale 네트워크의 Windows PC에 연결합니다. 새 챗봇을 만드는 것이 아니라 기존 Codex 대화를 엽니다.</p>
+      <form id="pairForm" hidden>
+        <label for="pairCode">일회용 연결 코드</label>
+        <input id="pairCode" name="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="PC에서 받은 16자리 코드" required>
+        <button id="pairButton" class="primary" type="submit">이 기기 연결</button>
+        <p class="secondary">코드는 발급 후 24시간 동안 한 번만 사용할 수 있습니다. 연결은 7일간 유지됩니다.</p>
+      </form>
+      <p id="pairStatus" role="status">PC 연결을 확인하고 있습니다…</p>
+      <button id="pairRetry" type="button" hidden>다시 연결</button>
+      <details><summary>연결이 안 되시나요?</summary><p>휴대폰과 PC의 Tailscale을 켜고 같은 네트워크인지 확인해 주세요. PC가 켜져 있고 Codex 원격 서비스가 실행 중이어야 합니다.</p></details>
+    </div>
+  </section>
+  <div id="appView" class="app" hidden>
+    <button id="usageSummary" class="usage-summary" type="button" aria-haspopup="dialog" aria-controls="toolsDialog" aria-label="PC Codex 계정 잔여량 · 확인 전 · 상세 보기">잔여량 · 확인 전</button>
+    <section id="activityNotice" class="activity-notice" aria-label="다른 대화의 새 응답" hidden>
+      <button id="openActivityNotice" type="button"><strong id="noticeTitle"></strong><span id="noticeSnippet" role="status"></span></button>
+      <button id="dismissActivityNotice" type="button" aria-label="새 응답 알림 닫기">닫기</button>
+    </section>
+    <aside id="sidebar" class="sidebar" aria-label="대화 목록">
+      <header class="list-header"><span class="wordmark">Codex <span>원격</span></span>
+        <details id="listMenu" class="list-menu"><summary id="listMenuToggle">관리</summary><div class="list-menu-body">
+          <div class="tool-actions"><button id="refreshList" type="button">목록 새로고침</button><button id="listDiagnostics" type="button" aria-haspopup="dialog">연결 진단</button><button id="listUpdates" type="button" aria-haspopup="dialog">업데이트</button></div>
+          <div class="device-controls"><a id="monitorStart" href="/native/notifications/start">화면 밖 알림 켜기</a><a id="monitorStop" href="/native/notifications/stop" hidden>화면 밖 알림 끄기</a><details><summary>알림 안내</summary><p>v0.2 앱에서 직접 켜면 알림창에 확인 중 표시가 유지됩니다. 절전·Tailscale 연결·앱 강제 종료에 따라 알림이 늦거나 멈출 수 있습니다. 앱을 다시 시작한 뒤 직접 켜 주세요.</p></details></div>
+          <details><summary>목록·연결 안내</summary><p id="listScope" class="tool-note"></p><p class="tool-note">활동은 화면을 보는 동안 최근 50개와 고정 대화를 자동 확인합니다.</p><p class="tool-note">Tailscale 전용. PC Codex를 열어 두세요. 승인·중지는 PC에서 처리합니다.</p></details>
+          <button id="logout" type="button">연결 해제</button>
+        </div></details>
+      </header>
+      <div class="search-wrap"><label for="search" class="sr-only">대화 제목 검색</label><input id="search" type="search" placeholder="대화 제목 검색" maxlength="200" autocomplete="off"></div>
+      <div class="list-caption"><span>이 PC의 대화</span><div><button id="newChat" type="button" aria-haspopup="dialog" aria-controls="newChatDialog">새 대화</button><button id="listAccounts" type="button" aria-haspopup="dialog" aria-controls="toolsDialog">계정</button></div></div>
+      <div class="activity-filters" role="group" aria-label="대화 활동 필터"><button id="filterAll" type="button" aria-pressed="true">전체</button><button id="filterWorking" type="button" aria-pressed="false">작업 중 0</button><button id="filterUnread" type="button" aria-pressed="false">새 응답 0</button><button id="filterFavorites" type="button" aria-pressed="false">즐겨찾기 0</button></div>
+      <p id="activityStatus" class="activity-status" role="status">PC 활동을 확인하고 있습니다…</p>
+      <p id="nativeStatus" class="activity-status" role="status" hidden></p>
+      <p id="storageStatus" class="storage-status" role="status" hidden></p>
+      <p id="listStatus" class="state-message" role="status"></p>
+      <p id="activityEmpty" class="state-message" hidden></p>
+      <nav id="threads" class="thread-list" aria-label="저장된 대화"></nav>
+      <button id="moreThreads" class="more" type="button" hidden>대화 더 보기</button>
+    </aside>
+    <main id="conversation" class="conversation">
+      <header class="chat-header">
+        <button id="back" class="back" type="button" aria-label="대화 목록으로">‹ 목록</button>
+        <div class="chat-heading"><h1 id="chatTitle">대화를 선택하세요</h1><p id="chatMeta">기존 대화 기록을 그대로 엽니다.</p></div>
+        <span id="connection" class="connection" role="status">대기</span>
+        <button id="chatTools" class="chat-tools-button" type="button" aria-haspopup="dialog">도구</button>
+      </header>
+      <div id="chatError" class="chat-error" role="alert" hidden></div>
+      <div id="transferArea" class="transfer-area" hidden><span id="transferStatus" role="status"></span><a id="cancelTransfer" href="/native/files/cancel">취소</a></div>
+      <div id="history" class="history" aria-label="대화 기록" tabindex="0">
+        <button id="moreHistory" class="more" type="button" hidden>이전 기록 불러오기</button>
+        <p id="historyStatus" class="state-message">왼쪽 목록에서 이어서 볼 대화를 선택해 주세요.</p>
+        <div id="messages"></div>
+        <details id="questions" class="questions" aria-label="선택한 대화의 질문 기록" hidden><summary id="questionSummary">질문 기록</summary><p id="questionStatus" class="question-status" role="status" hidden></p><button id="questionRetry" type="button" hidden>질문 기록 다시 확인</button><div id="questionCards"></div></details>
+      </div>
+      <div class="latest-response"><button id="latestResponse" type="button" hidden>새 답변 ↓</button></div>
+      <section id="sendRecovery" class="chat-error" aria-label="전송 잠금 해제" hidden>
+        <p>현재 대화 기록을 확인해 주세요. 잠금 해제는 로컬 전송 보호만 해제하며, 이전 요청을 취소하거나 다시 보내지 않습니다.</p>
+        <button id="acknowledgeSend" type="button">전송 확인 후 잠금 해제</button>
+      </section>
+      <form id="composer" class="composer">
+        <label for="draft" class="sr-only">후속 요청</label>
+        <div class="composer-primary">
+          <div class="composer-input"><textarea id="draft" rows="1" maxlength="16000" placeholder="후속 요청 입력" disabled></textarea><button id="send" class="primary" type="submit" aria-label="선택한 대화에 보내기" title="보내기" disabled>↑</button></div>
+          <div class="composer-options">
+            <button id="expandDraft" type="button" aria-label="후속 요청 크게 편집" title="크게 편집" aria-haspopup="dialog" aria-controls="editorDialog" disabled>⤢</button>
+            <button id="attachFiles" type="button" aria-label="사진·문서 첨부" title="사진·문서 첨부">＋</button><input id="attachmentPicker" type="file" multiple hidden accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.txt,.md,.csv,.json,.docx,.xlsx,.pptx,.zip">
+            <label for="sendModel" class="composer-choice"><span>모델</span><select id="sendModel" disabled><option value="">PC 설정 유지</option></select></label>
+            <label for="sendThinking" class="composer-choice"><span>추론</span><select id="sendThinking" disabled><option value="">PC 설정 유지</option></select></label>
+          </div>
+        </div>
+        <div id="sendOptionsFeedback" class="composer-feedback" hidden><span id="sendOptionsStatus" role="status" hidden></span><button id="refreshOptions" type="button" aria-label="모델·추론 선택지만 다시 확인">선택지 재확인</button></div>
+        <div id="attachments" class="attachments" aria-label="선택한 첨부"></div><p id="attachmentStatus" class="attachment-note" role="status" hidden></p>
+        <div id="composerFeedback" class="composer-feedback" hidden><span id="composerStatus" role="status"></span><button id="checkSend" type="button" hidden>전송 상태 확인</button></div>
+      </form>
+    </main>
+  </div>
+  <dialog id="toolsDialog" class="tools-dialog" aria-labelledby="toolsTitle">
+    <header class="tools-heading"><h2 id="toolsTitle">대화 도구</h2><button id="closeTools" type="button">닫기</button></header>
+    <nav id="toolsNav" class="tools-nav" aria-label="도구 선택"><button id="toolQuick" type="button">빠른 지시</button><button id="toolSearch" type="button">메시지 검색</button><button id="toolResults" type="button">결과 모음</button><button id="toolDiagnostics" type="button">연결 진단</button><button id="toolUsage" type="button">사용 한도</button><button id="toolUpdates" type="button">업데이트</button><button id="toolAccounts" type="button">계정</button></nav>
+    <section id="quickPane" hidden aria-label="빠른 지시">
+      <p class="tool-note">현재 초안 끝에 추가합니다. 보내기 전 내용을 확인해 주세요. 자동 전송하지 않습니다.</p>
+      <div class="quick-instructions"><button id="quickContinue" type="button">계속 진행해줘</button><button id="quickStatus" type="button">현재 작업 상황을 알려줘</button><button id="quickError" type="button">오류 원인부터 확인하고 해결해줘</button></div>
+      <details id="personalQuick"><summary>내 빠른 지시 관리</summary>
+        <p class="tool-note">이 기기·현재 연결에만 저장합니다. 최대 12개 · 이름 40자 · 본문 2,000자입니다.</p>
+        <div id="snippetList" class="snippet-list"></div><p id="snippetEmpty" class="tool-note">저장한 지시가 없습니다.</p>
+        <form id="snippetForm"><label for="snippetLabel">지시 이름</label><input id="snippetLabel" maxlength="40" autocomplete="off" required><label for="snippetText">지시 본문</label><textarea id="snippetText" maxlength="2000" rows="3" required></textarea><div class="tool-actions"><button id="saveSnippet" type="submit">추가</button><button id="cancelSnippet" type="button" hidden>수정 취소</button></div></form>
+        <p id="snippetFeedback" class="tool-note" role="status"></p>
+      </details>
+      <p id="quickFeedback" class="tool-note" role="status"></p>
+      <h3 class="answer-display-title">답변 표시</h3>
+      <div class="tool-actions" role="group" aria-label="답변 표시 방식"><button id="answerSmooth" type="button" aria-pressed="true">부드럽게</button><button id="answerInstant" type="button" aria-pressed="false">즉시</button></div>
+      <details class="tool-help"><summary>대화·전송 안내</summary><p id="policyNotice" class="tool-note">PC의 기존 대화로 이어집니다. 승인·중단은 PC에서 처리해 주세요.</p><p class="tool-note">모델·추론은 다음 전송에만 적용합니다. PC 설정 유지는 값을 지정하지 않는 선택이며 현재 PC 설정을 읽었다는 뜻이 아닙니다.</p><p id="answerDisplayNote" class="tool-note">주기적으로 받은 새 답변만 짧게 이어 표시합니다. 실제 토큰 스트리밍은 아닙니다.</p></details>
+    </section>
+    <section id="messageSearchPane" hidden aria-label="불러온 메시지에서 검색">
+      <label for="messageSearch">불러온 메시지에서 검색</label><input id="messageSearch" type="search" maxlength="200" autocomplete="off" placeholder="문자 그대로 검색">
+      <p class="tool-note">현재 대화에서 불러온 나·Codex 본문과 원문 생략 안내만 검색합니다. 더 오래된 기록은 먼저 불러와 주세요. 최대 200개 메시지 결과입니다.</p>
+      <div class="tool-actions"><button id="searchPrevious" type="button">이전</button><button id="searchNext" type="button">다음</button><button id="searchClear" type="button">검색 지우기</button></div>
+      <p id="messageSearchStatus" class="tool-note" role="status"></p><div id="messageSearchResults" class="tool-list"></div>
+    </section>
+    <section id="resultsPane" hidden aria-label="불러온 결과 모음">
+      <p id="resultsScope" class="tool-note">현재 대화에서 불러온 결과만 표시합니다. 최대 128개이며 이전 기록은 먼저 불러와 주세요.</p>
+      <div class="tool-actions" role="group" aria-label="결과 종류"><button id="resultsAll" type="button">전체</button><button id="resultsImages" type="button">사진</button><button id="resultsVideos" type="button">동영상</button><button id="resultsFiles" type="button">파일</button></div>
+      <p class="tool-note">결과를 누르면 원래 메시지에서 보기·재생·저장·공유할 수 있습니다. 모음에서는 영상을 중복 재생하지 않습니다.</p>
+      <p id="resultsStatus" class="tool-note" role="status"></p><div id="gatheredResults" class="tool-list"></div>
+    </section>
+    <section id="usagePane" hidden aria-label="PC Codex 사용 한도">
+      <p id="usageStatus" class="tool-note usage-status" role="status" hidden></p>
+      <h3 class="answer-display-title">계정 토큰 활동</h3>
+      <p id="usageTokens" class="usage-token-value"></p><p id="usageTokenChecked" class="tool-note"></p>
+      <p class="tool-note">누적과 최근 제공 날짜의 활동입니다. 잔여 한도·크레딧·다른 도구의 사용량이 아닙니다.</p>
+      <div id="usageBuckets"></div>
+      <p id="usageResets" class="tool-note usage-resets"></p>
+      <div class="usage-controls"><p id="usageChecked" class="tool-note"></p><button id="refreshUsage" type="button" aria-label="사용 한도 다시 확인">다시 확인</button></div>
+      <details id="usageCriteria" class="usage-criteria">
+        <summary>표시 기준</summary>
+        <p class="tool-note">토큰 활동은 account/usage/read의 안전한 정수만 표시합니다. 누적과 가장 최근에 제공된 날짜의 값을 함께 표시하며 오늘·UTC 집계로 추정하지 않습니다. 미제공·잘못된 값·미지원은 0이 아닙니다. 한도와 독립적인 최소 60초 캐시이며 실패 시 이전 관찰값은 오래됨으로 표시합니다. 초기화까지의 시간은 화면이 보일 때 기기에서 분 단위로 계산하며 조회·한도 복구를 실행하지 않습니다.</p>
+        <p class="tool-note">PC Codex 앱에 로그인된 계정의 한도입니다. 대화별이 아니라 계정에서 공유하며 모든 ChatGPT 모델의 통합 사용량이 아닙니다. 다른 도구의 사용량은 포함하지 않습니다.</p>
+        <p class="tool-note">남은 비율은 사용률을 100에서 뺀 값입니다. 각 한도는 독립적이며 확인 이후 달라질 수 있습니다. 초기화 예정 시각이 지나도 새 잔여량은 다시 조회해야 합니다. 한도 표시만으로 메시지 전송 가능 여부를 판단하지 않습니다.</p>
+        <p class="tool-note">크레딧은 사용 가능한 잔액 관찰값이며 비율이나 메시지 수가 아닙니다. Codex의 유한 잔액은 공개 참고가와 USD/KRW 환율로 환산하며 ≈는 원 단위 반올림·만/억/조 단위의 근삿값입니다. 실제 계약·할인·결제·환불 금액은 알 수 없습니다. 원래 소수 문자열은 상세에 보존합니다. 미제공·잘못된 값은 0으로 추정하지 않습니다. 확인된 유한 잔액이 0이면 잔액 항목을 숨기며, 양수는 1원 미만이어도 표시합니다. 무제한은 금액으로 환산하지 않습니다. 초기화권은 획득한 한도 초기화 횟수로 크레딧 잔액과 별도이며 여기서는 사용하지 않습니다.</p>
+        <p class="tool-note">공개 참고가 출처: OpenAI 학생 안내(developers.openai.com/community/students)의 2,500크레딧 = 100 USD, 즉 1크레딧 = 0.04 USD입니다. 원래 잔액 자체를 USD로 간주하지 않으며 토큰·메시지·기간별 한도를 환산하지 않습니다. 단위를 확인할 수 없는 추가 한도도 환산하지 않습니다.</p>
+        <p class="tool-note">환율 출처: Frankfurter(frankfurter.dev)의 공개 USD/KRW 일별 참고 환율입니다. 기준일은 환율 제공 날짜이며 다른 시각은 기기 현지 시간입니다. 서버만 고정 공개 주소에서 조회하고 계정·사용량은 보내지 않습니다. 성공 약 24시간·실패 15분 캐시를 사용하며 7일을 넘긴 환율은 사용하지 않습니다. 주말에는 이전 영업일 환율일 수 있고, 실패 후 보관값은 오래됨으로 표시합니다.</p>
+        <p class="tool-note">시간은 기기 현지 시간입니다. 사용 한도 조회 간격은 최소 60초이며 다시 확인도 캐시를 사용합니다.</p>
+        <p class="tool-note">제공된 한도를 최대 8개까지 각각 표시합니다. Codex 외 항목은 계정 정보 노출을 막기 위해 ‘추가 한도’로 구분합니다.</p>
+      </details>
+    </section>
+    <section id="updatesPane" hidden aria-label="웹 업데이트">
+      <p id="webRevision" class="tool-note"></p><p class="tool-note">Android 앱 0.3.0과 별개인 웹 화면 버전입니다. 적용은 이 화면만 새로 엽니다.</p>
+      <ul id="releaseNotes" class="release-notes"></ul><p id="updateStatus" class="tool-note" role="status"></p>
+      <div class="tool-actions"><button id="retryUpdate" type="button">다시 확인</button><button id="applyUpdate" type="button" hidden>저장하고 웹 업데이트 적용</button></div>
+      <p class="tool-note">자동 적용하지 않습니다. 첨부·전송·새 대화 확인·저장하지 않은 입력이 있으면 먼저 정리해 주세요. 새 연결이나 요청 전송은 하지 않습니다.</p>
+    </section>
+    <section id="accountsPane" hidden aria-label="저장한 Codex 계정">
+      <p id="accountCurrent" class="account-current"></p>
+      <div class="tool-actions"><button id="refreshAccounts" type="button">계정 다시 확인</button><button id="confirmAccount" type="button" hidden>현재 계정 확인하고 대화 다시 선택</button></div>
+      <p id="accountStatus" class="tool-note" role="status"></p>
+      <div id="accountProfiles" class="account-profiles"></div><p id="accountEmpty" class="tool-note">저장한 계정이 없습니다.</p>
+      <p id="accountSelected" class="tool-note"></p>
+      <label class="account-idle"><input id="accountPcIdle" type="checkbox"> PC의 모든 Codex 작업·확인 대기를 마쳤습니다</label>
+      <button id="switchAccount" type="button" disabled>선택한 계정으로 전환</button>
+      <p id="accountSwitchLimit" class="tool-note"></p>
+      <details class="account-add"><summary>계정 저장·추가</summary>
+        <label for="accountLabel">저장 이름</label><input id="accountLabel" maxlength="40" autocomplete="off" placeholder="예: 개인 · 작업용">
+        <div class="tool-actions"><button id="saveCurrentAccount" type="button">현재 PC 로그인 저장</button><button id="addAccount" type="button">다른 계정 로그인해 추가</button><button id="renameAccount" type="button" hidden>이름 저장</button></div>
+        <p class="tool-note">다른 계정 추가는 분리된 로그인으로 진행하며 현재 PC 로그인은 바꾸지 않습니다. 저장 후에도 자동 전환하지 않습니다. 최대 8개입니다.</p>
+      </details>
+      <details class="account-add"><summary>보관·전환 방식 자세히</summary><p class="tool-note">저장한 계정을 선택한 뒤 직접 전환합니다. 전환할 때 PC Codex를 잠시 다시 엽니다.</p><p id="accountVerification" class="tool-note"></p><p class="tool-note">PC와 휴대폰은 같은 목록을 사용합니다. 휴대폰 연결은 유지됩니다. 로그인 정보는 이 PC의 현재 Windows 사용자 전용으로 암호화해 보관하며, 인증이 만료·취소되면 다시 로그인해야 합니다.</p><p class="tool-note">최근 작업 목록만 조회할 수 있어 PC 전체 유휴를 자동 보증하지 못합니다. 모든 PC 작업을 직접 확인해 주세요. 전환 중 잠깐 로그인 파일이 없을 수 있으며, 중단되면 암호화한 이전 로그인으로 복구합니다. 다른 프로그램의 갱신은 덮어쓰지 않습니다.</p></details>
+      <div id="accountDevice" class="account-device" tabindex="-1" role="region" aria-label="공식 기기 코드 로그인" hidden><p>공식 OpenAI 페이지에서 다음 코드를 입력해 주세요.</p><strong id="accountDeviceCode"></strong><a id="accountDeviceLink" target="_blank" rel="noopener noreferrer">공식 로그인 페이지 열기 ↗</a><p class="tool-note">최대 15분 · 비밀번호나 로그인 코드를 채팅에 보내지 마세요. 기기 코드 로그인이 정책상 허용되지 않으면 설정을 변경하지 말고 취소해 주세요.</p></div>
+      <button id="cancelAccountLogin" type="button" hidden>계정 추가 취소</button>
+      <section id="accountRecovery" hidden aria-label="계정 전환 복구"><h3>PC에서 상태 확인이 필요합니다</h3><p class="tool-note">PC 상태를 먼저 확인해 주세요. 이전 로그인 복원은 확인된 파일 또는 중단으로 비어 있는 경우에만 진행합니다. 다른 로그인·동시 갱신은 덮어쓰지 않습니다.</p><div class="tool-actions"><button id="rollbackAccount" type="button">이전 로그인 복원 시도</button><button id="keepCurrentAccount" type="button">현재 로그인 검증 후 유지</button></div></section>
+    </section>
+    <section id="diagnosticsPane" hidden aria-label="연결 진단">
+      <p id="diagnosticStatus" class="tool-note" role="status"></p><dl id="diagnosticFacts" class="diagnostic-facts"></dl>
+      <button id="retryDiagnostics" type="button">연결 다시 확인</button>
+      <p class="tool-note">전송 결과가 불명확하면 재전송하지 마세요.</p>
+      <details class="tool-help"><summary>PC 연결 점검 순서</summary><p class="tool-note">브리지에 닿지 않으면 PC 전원·Tailscale·네트워크 중 어느 원인인지 앱에서 구분할 수 없습니다. 두 기기의 Tailscale과 PC 전원, 브리지 서비스, PC Codex가 열려 있는지 확인해 주세요.</p></details>
+    </section>
+  </dialog>
+  <dialog id="accountConfirmDialog" class="tools-dialog account-confirm" aria-labelledby="accountConfirmTitle" aria-describedby="accountConfirmLabel accountConfirmEmail accountConfirmEffect">
+    <header class="tools-heading"><h2 id="accountConfirmTitle">계정 작업 확인</h2><button id="closeAccountConfirmation" type="button" aria-label="계정 작업 확인 닫기">닫기</button></header>
+    <div class="account-confirm-body"><p id="accountConfirmLabel" class="account-current"></p><p id="accountConfirmEmail" class="tool-note"></p><p id="accountConfirmEffect" class="tool-note"></p><p id="accountConfirmStatus" class="tool-note" role="status"></p></div>
+    <div class="tool-actions"><button id="cancelAccountConfirmation" type="button" autofocus>취소</button><button id="approveAccountConfirmation" type="button" class="primary">확인</button></div>
+  </dialog>
+  <dialog id="newChatDialog" class="tools-dialog model-settings" aria-labelledby="newChatTitle">
+    <header class="tools-heading"><h2 id="newChatTitle">새 대화</h2><button id="closeNewChat" type="button">닫기</button></header>
+    <p class="tool-note">첫 요청을 PC Codex에 보냅니다.</p>
+    <form id="newChatForm">
+      <label for="newPrompt">첫 요청</label><textarea id="newPrompt" rows="4" maxlength="16000" required placeholder="새 대화에서 할 일을 입력하세요"></textarea>
+      <div class="composer-options"><button id="attachNewFiles" type="button">＋ 사진·문서</button><input id="newAttachmentPicker" type="file" multiple hidden accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.txt,.md,.csv,.json,.docx,.xlsx,.pptx,.zip"></div><div id="newAttachments" class="attachments" aria-label="첫 요청 첨부"></div><p id="newAttachmentStatus" class="attachment-note" role="status" hidden></p>
+      <label for="newProject">프로젝트</label><select id="newProject" aria-describedby="projectOptionsStatus"><option value="">프로젝트 없이</option></select>
+      <p id="projectOptionsStatus" class="tool-note" role="status" hidden></p>
+      <label for="createModel">모델</label><select id="createModel"><option value="">PC 설정 유지</option></select>
+      <label for="createThinking">추론</label><select id="createThinking" disabled><option value="">PC 설정 유지</option></select>
+      <p id="createOptionsStatus" class="tool-note" role="status" hidden></p>
+      <button id="createChat" type="submit" class="primary">새 대화 만들고 보내기</button>
+    </form>
+    <p id="creationStatus" class="tool-note" role="status" hidden></p>
+    <div class="tool-actions"><button id="checkCreation" type="button" hidden>생성 상태 확인</button><button id="refreshNewOptions" type="button">선택지 다시 확인</button><button id="openCreated" type="button" hidden>생성한 대화 열기</button></div>
+    <section id="creationRecovery" hidden aria-label="새 대화 생성 보호 해제"><p class="tool-note">대기·결과 불명인 요청은 자동으로 다시 만들지 않습니다. PC 대화 목록에서 생성 여부를 직접 확인해 주세요. 보호 해제는 취소·재시도가 아니며, 다시 만들면 중복 작업이 될 수 있습니다.</p><button id="acknowledgeCreation" type="button">PC 확인 후 생성 보호만 해제</button></section>
+  </dialog>
+  <dialog id="editorDialog" class="tools-dialog expanded-editor" aria-labelledby="editorTitle"><header class="tools-heading"><h2 id="editorTitle">후속 요청 편집</h2><button id="closeEditor" type="button">초안으로 돌아가기</button></header><label for="expandedDraft" class="sr-only">후속 요청 크게 편집</label><textarea id="expandedDraft" maxlength="16000" aria-describedby="editorStatus"></textarea><p id="editorStatus" class="tool-note" role="status">같은 대화의 초안입니다. 돌아간 뒤 보내기를 눌러 주세요.</p></dialog>
+  <dialog id="copyDialog" class="tools-dialog" aria-labelledby="copyTitle"><header class="tools-heading"><h2 id="copyTitle">메시지 직접 복사</h2><button id="closeCopy" type="button">닫기</button></header><p class="tool-note">자동 복사가 허용되지 않았습니다. 이 메시지만 선택한 뒤 기기의 복사 메뉴를 이용해 주세요.</p><textarea id="manualCopy" readonly rows="6" aria-label="선택한 메시지 본문"></textarea><button id="selectCopy" type="button">본문 선택</button></dialog>
+  <dialog id="imageDialog" class="image-dialog" aria-labelledby="imageCaption">
+    <div class="image-dialog-header"><p id="imageCaption">대화 이미지</p><button id="closeImage" type="button">닫기</button></div>
+    <p id="imageViewerStatus" class="image-viewer-status" role="status" hidden></p>
+    <div class="image-zoom-controls" role="group" aria-label="이미지 확대 조절">
+      <button id="imageZoomOut" type="button" aria-label="이미지 축소" disabled>축소</button>
+      <output id="imageZoom" aria-label="화면 맞춤 기준 확대율" aria-live="off">100%</output>
+      <button id="imageZoomIn" type="button" aria-label="이미지 확대" disabled>확대</button>
+      <button id="imageFit" type="button" disabled>화면 맞춤</button>
+    </div>
+    <div id="imageStage" class="image-stage" tabindex="0" role="group" aria-label="이미지 확대 영역" aria-describedby="imageZoomHelp"><img id="largeImage" alt="대화 이미지" draggable="false" hidden></div>
+    <p id="imageZoomHelp" class="image-zoom-help">두 손가락·두 번 탭으로 확대, 확대한 뒤 끌어 이동 · 원본 해상도는 그대로입니다.</p>
+  </dialog>
+</body>
+</html>

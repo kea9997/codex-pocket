@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import vm from 'node:vm';
+import { createBridge, assets } from '../server/http.mjs';
+import { release } from '../server/release.mjs';
+import { ORIGIN } from '../server/security.mjs';
+import { fixture, httpCall } from './helpers.mjs';
+import { browser } from './browser-fixture.mjs';
+
+test('release metadata is a tiny authenticated same-origin readonly fixed manifest, rejecting queries/bodies/mutations and causing no native calls', async t => {
+  const f = await fixture(t), server = createBridge(f); await new Promise(done => server.listen(0, '127.0.0.1', done));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const call = (path, options) => httpCall(server.address().port, path, options);
+  assert.equal((await call('/api/release')).status, 401);
+  const code = JSON.parse(readFileSync(join(f.dir, 'pairing.json'))).code;
+  const paired = await call('/api/pair', { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json' }, data: { code } });
+  const cookie = paired.headers['set-cookie'][0].split(';')[0], headers = { Cookie: cookie };
+  const result = await call('/api/release', { headers }); assert.equal(result.status, 200); assert.deepEqual(result.json, release);
+  assert.ok(result.data.length < 2048); assert.equal(result.headers['cache-control'], 'no-store'); assert.equal(result.headers['x-content-type-options'], 'nosniff');
+  assert.deepEqual(Object.keys(result.json).sort(), ['notes', 'revision']);
+  assert.equal((await call('/api/release?', { headers })).status, 400); assert.equal((await call('/api/release?url=https://evil.invalid', { headers })).status, 400);
+  assert.equal((await call('/api/release', { headers: { ...headers, Origin: 'https://evil.invalid' } })).status, 403);
+  assert.equal((await call('/api/release', { headers: { ...headers, 'Content-Length': 1 }, data: 'x' })).status, 400);
+  const session = (await call('/api/session', { headers })).json;
+  const post = { method: 'POST', headers: { ...headers, Origin: ORIGIN, 'Content-Type': 'application/json', 'X-Codex-CSRF': session.csrf }, data: {} };
+  assert.equal((await call('/api/release', post)).status, 404); assert.equal((await call('/sample/update', post)).status, 404);
+  assert.equal(f.desktop.calls.length, 0); assert.equal(f.engine.records.length, 0);
+  await call('/api/logout', post); assert.equal((await call('/api/release', { headers })).status, 401);
+});
+test('one manifest generates served HTML revision and client snapshot; stale document/script mismatch is visible and cannot silently claim or apply a version', async () => {
+  const html = assets.get('/').data.toString(), app = assets.get('/app.js').data.toString();
+  assert.ok(!html.includes('__WEB_REVISION__')); assert.ok(html.includes(`data-web-revision="${release.revision}"`));
+  const context = vm.createContext({}); vm.runInContext(app.slice(0, app.indexOf('\n')), context);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.CodexPhoneRelease)), release);
+  const f = await browser(); f.evaluate("state.updates.result = { revision:'different', notes:['다른 버전'] }; document.documentElement.dataset.webRevision = 'mixed-document'; renderUpdates();");
+  assert.match(f.el('webRevision').textContent, /확인할 수 없/); assert.equal(f.el('applyUpdate').hidden, true); f.el('applyUpdate').onclick(); assert.equal(f.navigation.location.reloads, undefined);
+  f.evaluate('delete globalThis.CodexPhoneRelease; renderUpdates();'); assert.equal(f.el('applyUpdate').hidden, true);
+});
